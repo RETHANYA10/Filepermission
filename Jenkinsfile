@@ -2,13 +2,13 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 's', defaultValue: 'f1', description: 'Folder name (f1 = foldername)')
+        // s = folder name (f1 by default)
+        string(name: 's', defaultValue: 'f1', description: 'Folder name to create (e.g., f1)')
     }
 
     environment {
-        F1   = "${params.s}"                                  // folder name from parameter
-        DIR  = "${env.WORKSPACE}/${params.s}"                 // workspace/<f1>
-        FILE = "${env.WORKSPACE}/${params.s}/runme.sh"        // script file
+        DIR  = "${env.WORKSPACE}/${params.s}"
+        FILE = "${env.WORKSPACE}/${params.s}/runme.sh"
     }
 
     stages {
@@ -31,7 +31,7 @@ pipeline {
 #!/usr/bin/env bash
 set -euo pipefail
 echo "Hello from runme.sh"
-echo "Folder name (F1) = ${F1}"
+echo "Folder name (F1) = ${F1:-N/A}"   # will show N/A unless you set F1
 echo "Running as: $(whoami)"
 echo "PWD: $(pwd)"
 date
@@ -81,8 +81,9 @@ EOF
 
     post {
         always {
-            archiveArtifacts artifacts: '${s}/**', allowEmptyArchive: true
+            // IMPORTANT: use DOUBLE quotes so ${params.s} expands
+            archiveArtifacts artifacts: "${params.s}/**", allowEmptyArchive: false
+            echo "Archived folder: ${params.s}"
         }
     }
 }
-
