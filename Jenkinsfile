@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     parameters {
-        // Folder name to create (default mfolder)
+        // Folder name you want to create (under /home/administrator)
         string(name: 's', defaultValue: 'mfolder', description: 'Folder name to create under /home/administrator')
     }
 
@@ -18,13 +18,13 @@ pipeline {
         stage('Create directory (sudo)') {
             steps {
                 sh '''
-                  set -euo pipefail
-                  echo "[INFO] Folder param (s): ${s}"
+                  bash -euo pipefail <<'BASH'
+                  echo "[INFO] s=${s}"
                   echo "[DIR] Creating: ${DIR}"
 
                   if sudo mkdir -p "${DIR}"; then
                     sudo chown -R ${OWNER} "${DIR}"
-                    # Give ALL permissions (demo only)
+                    # DEMO: all permissions for dir (777). Avoid in production.
                     sudo chmod 777 "${DIR}"
                     echo "[DIR] Created OK"
                     sudo ls -ld "${DIR}"
@@ -32,6 +32,7 @@ pipeline {
                     echo "[DIR] ERROR: Failed to create ${DIR}"
                     exit 1
                   fi
+                  BASH
                 '''
             }
         }
@@ -39,13 +40,13 @@ pipeline {
         stage('Create file if directory exists (sudo)') {
             steps {
                 sh '''
-                  set -euo pipefail
+                  bash -euo pipefail <<'BASH'
                   echo "[FILE] Checking directory exists before file creation"
 
                   if sudo test -d "${DIR}"; then
                     echo "[FILE] Creating: ${FILE}"
-                    # Use tee with sudo so redirect happens with elevated perms
-                    sudo tee "${FILE}" > /dev/null << 'EOF'
+                    # Use tee+sudo so the write occurs with elevated permissions
+                    sudo tee "${FILE}" > /dev/null <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "Hello from runme.sh"
@@ -54,13 +55,14 @@ echo "PWD: $(pwd)"
 date
 EOF
                     sudo chown ${OWNER} "${FILE}"
-                    # Give ALL permissions (demo only)
+                    # DEMO: give all permissions to script (777) so it is executable by anyone
                     sudo chmod 777 "${FILE}"
                     sudo ls -l "${FILE}"
                   else
                     echo "[FILE] ERROR: Directory missing: ${DIR}"
                     exit 2
                   fi
+                  BASH
                 '''
             }
         }
@@ -68,23 +70,26 @@ EOF
         stage('Execute file if created (sudo)') {
             steps {
                 sh '''
-                  set -euo pipefail
+                  bash -euo pipefail <<'BASH'
                   echo "[EXEC] Verifying and executing file"
 
                   if sudo test -f "${FILE}"; then
                     if ! sudo test -x "${FILE}"; then
-                      echo "[EXEC] File not executable, adding exec bit"
+                      echo "[EXEC] Script not executable; adding exec bit"
                       sudo chmod +x "${FILE}"
                     fi
+
                     echo "[EXEC] Running ${FILE}"
+                    # Run the script and capture output
                     sudo "${FILE}" | sudo tee "${OUT}" > /dev/null
                     sudo chown ${OWNER} "${OUT}"
-                    # Give ALL read/write (demo only); no need for exec on output
+                    # DEMO: data file writable by all (666). Avoid in production.
                     sudo chmod 666 "${OUT}"
                   else
                     echo "[EXEC] ERROR: File missing: ${FILE}"
                     exit 3
                   fi
+                  BASH
                 '''
             }
         }
@@ -92,18 +97,21 @@ EOF
         stage('Final permission pass (sudo)') {
             steps {
                 sh '''
-                  set -euo pipefail
-                  echo "[PERMS] Setting FINAL ALL permissions (demo only)"
+                  bash -euo pipefail <<'BASH'
+                  echo "[PERMS] Setting FINAL permissions (demo - wide open)"
+
+                  # DEMO: all permissions. Prefer 755 (dir) and 644 (files) in real environments.
                   sudo chmod 777 "${DIR}"
                   sudo chmod 777 "${FILE}"
-                  # OUT is a data file; keep rw for all, no exec
                   sudo chmod 666 "${OUT}"
+
                   echo "[PERMS] Final state:"
                   sudo ls -ld "${DIR}"
                   sudo ls -l "${DIR}"
                   echo "DIR_MODE=$(sudo stat -c '%a' "${DIR}")"
                   echo "FILE_MODE=$(sudo stat -c '%a' "${FILE}")"
                   echo "OUT_MODE=$(sudo stat -c '%a' "${OUT}")"
+                  BASH
                 '''
             }
         }
@@ -111,14 +119,17 @@ EOF
         stage('Verify & print paths') {
             steps {
                 sh '''
-                  set -euo pipefail
+                  bash -euo pipefail <<'BASH'
                   sudo test -d "${DIR}"
                   sudo test -f "${FILE}"
                   sudo test -f "${OUT}"
-                  echo "[VERIFY] Folder name: ${s}"
+
+                  echo "[VERIFY] Success."
+                  echo "[VERIFY] Folder: ${s}"
                   echo "[VERIFY] Full path: ${DIR}"
                   echo "[VERIFY] Contents:"
                   sudo ls -l "${DIR}"
+                  BASH
                 '''
             }
         }
@@ -127,7 +138,7 @@ EOF
     post {
         always {
             echo "Done. Folder created at: ${DIR}"
-            echo "NOTE: This path is outside the Jenkins workspace, so artifact archiving will not capture it."
+            echo "NOTE: Path is outside the Jenkins workspace; artifact archiving will not capture it."
         }
     }
 }
