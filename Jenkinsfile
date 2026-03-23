@@ -1,144 +1,81 @@
 pipeline {
     agent any
 
-    parameters {
-        // Folder name you want to create (under /home/administrator)
-        string(name: 's', defaultValue: 'mfolder', description: 'Folder name to create under /home/administrator')
-    }
-
-    environment {
-        DIR   = "/home/administrator/${params.s}"
-        FILE  = "/home/administrator/${params.s}/runme.sh"
-        OUT   = "/home/administrator/${params.s}/output.txt"
-        OWNER = "administrator:administrator"
-    }
-
     stages {
-
-        stage('Create directory (sudo)') {
+        stage('Create Directory') {
             steps {
                 sh '''
-                  bash -euo pipefail <<'BASH'
-                  echo "[INFO] s=${s}"
-                  echo "[DIR] Creating: ${DIR}"
+                    #!/bin/bash
+                    DIR_NAME="/home/administrator/mcet"
 
-                  if sudo mkdir -p "${DIR}"; then
-                    sudo chown -R ${OWNER} "${DIR}"
-                    # DEMO: all permissions for dir (777). Avoid in production.
-                    sudo chmod 777 "${DIR}"
-                    echo "[DIR] Created OK"
-                    sudo ls -ld "${DIR}"
-                  else
-                    echo "[DIR] ERROR: Failed to create ${DIR}"
-                    exit 1
-                  fi
-                  BASH
-                '''
-            }
-        }
+                    # Try to create directory
+                    sudo mkdir -p "$DIR_NAME"
 
-        stage('Create file if directory exists (sudo)') {
-            steps {
-                sh '''
-                  bash -euo pipefail <<'BASH'
-                  echo "[FILE] Checking directory exists before file creation"
-
-                  if sudo test -d "${DIR}"; then
-                    echo "[FILE] Creating: ${FILE}"
-                    # Use tee+sudo so the write occurs with elevated permissions
-                    sudo tee "${FILE}" > /dev/null <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-echo "Hello from runme.sh"
-echo "Running as: $(whoami)"
-echo "PWD: $(pwd)"
-date
-EOF
-                    sudo chown ${OWNER} "${FILE}"
-                    # DEMO: give all permissions to script (777) so it is executable by anyone
-                    sudo chmod 777 "${FILE}"
-                    sudo ls -l "${FILE}"
-                  else
-                    echo "[FILE] ERROR: Directory missing: ${DIR}"
-                    exit 2
-                  fi
-                  BASH
-                '''
-            }
-        }
-
-        stage('Execute file if created (sudo)') {
-            steps {
-                sh '''
-                  bash -euo pipefail <<'BASH'
-                  echo "[EXEC] Verifying and executing file"
-
-                  if sudo test -f "${FILE}"; then
-                    if ! sudo test -x "${FILE}"; then
-                      echo "[EXEC] Script not executable; adding exec bit"
-                      sudo chmod +x "${FILE}"
+                    # Verify with sudo ls
+                    if sudo test -d "$DIR_NAME"; then
+                        echo "Directory created successfully: $DIR_NAME"
+                    else
+                        echo "Directory not created: $DIR_NAME"
+                        exit 1
                     fi
-
-                    echo "[EXEC] Running ${FILE}"
-                    # Run the script and capture output
-                    sudo "${FILE}" | sudo tee "${OUT}" > /dev/null
-                    sudo chown ${OWNER} "${OUT}"
-                    # DEMO: data file writable by all (666). Avoid in production.
-                    sudo chmod 666 "${OUT}"
-                  else
-                    echo "[EXEC] ERROR: File missing: ${FILE}"
-                    exit 3
-                  fi
-                  BASH
                 '''
             }
         }
 
-        stage('Final permission pass (sudo)') {
+        stage('Create File') {
             steps {
                 sh '''
-                  bash -euo pipefail <<'BASH'
-                  echo "[PERMS] Setting FINAL permissions (demo - wide open)"
+                    #!/bin/bash
+                    DIR_NAME="/home/administrator/mcet"
+                    FILE_NAME="$DIR_NAME/hello.sh"
 
-                  # DEMO: all permissions. Prefer 755 (dir) and 644 (files) in real environments.
-                  sudo chmod 777 "${DIR}"
-                  sudo chmod 777 "${FILE}"
-                  sudo chmod 666 "${OUT}"
-
-                  echo "[PERMS] Final state:"
-                  sudo ls -ld "${DIR}"
-                  sudo ls -l "${DIR}"
-                  echo "DIR_MODE=$(sudo stat -c '%a' "${DIR}")"
-                  echo "FILE_MODE=$(sudo stat -c '%a' "${FILE}")"
-                  echo "OUT_MODE=$(sudo stat -c '%a' "${OUT}")"
-                  BASH
+                    if sudo test -d "$DIR_NAME"; then
+                        echo '#!/bin/bash' | sudo tee "$FILE_NAME" > /dev/null
+                        echo 'echo Hello from MCET!' | sudo tee -a "$FILE_NAME" > /dev/null
+                        sudo chmod +x "$FILE_NAME"
+                        echo "File created: $FILE_NAME"
+                    else
+                        echo "Directory not found: $DIR_NAME"
+                        exit 1
+                    fi
                 '''
             }
         }
 
-        stage('Verify & print paths') {
+        stage('Execute File') {
             steps {
                 sh '''
-                  bash -euo pipefail <<'BASH'
-                  sudo test -d "${DIR}"
-                  sudo test -f "${FILE}"
-                  sudo test -f "${OUT}"
+                    #!/bin/bash
+                    FILE_NAME="/home/administrator/mcet/hello.sh"
 
-                  echo "[VERIFY] Success."
-                  echo "[VERIFY] Folder: ${s}"
-                  echo "[VERIFY] Full path: ${DIR}"
-                  echo "[VERIFY] Contents:"
-                  sudo ls -l "${DIR}"
-                  BASH
+                    if sudo test -f "$FILE_NAME"; then
+                        sudo bash "$FILE_NAME"
+                    else
+                        echo "File not found: $FILE_NAME"
+                        exit 1
+                    fi
                 '''
             }
         }
-    }
 
-    post {
-        always {
-            echo "Done. Folder created at: ${DIR}"
-            echo "NOTE: Path is outside the Jenkins workspace; artifact archiving will not capture it."
+        stage('Change Permissions') {
+            steps {
+                sh '''
+                    #!/bin/bash
+                    DIR_NAME="/home/administrator/mcet"
+                    FILE_NAME="$DIR_NAME/hello.sh"
+
+                    if sudo test -f "$FILE_NAME"; then
+                        sudo chmod 755 "$DIR_NAME"
+                        sudo chmod 744 "$FILE_NAME"
+                        echo "Permissions updated:"
+                        sudo ls -l "$DIR_NAME"
+                    else
+                        echo "File not found, cannot change permissions."
+                        exit 1
+                    fi
+                '''
+            }
         }
     }
 }
