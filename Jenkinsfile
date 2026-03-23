@@ -1,55 +1,47 @@
 pipeline {
     agent any
 
+    // Adjust these to your needs
+    environment {
+        TARGET_DIR  = '/home/administrator/newfolder'
+        TARGET_FILE = '/home/administrator/newfolder/runme.sh'
+        OWNER       = 'administrator:administrator'
+    }
+
     stages {
-        stage('Create directory') {
+
+        stage('Create directory (sudo)') {
             steps {
                 sh '''
-                    set -e
-                    echo "Workspace: $WORKSPACE"
-                    mkdir -p "$WORKSPACE/mydir"
-                    echo "Created directory: $WORKSPACE/mydir"
+                  set -e
+                  echo "[DIR] Creating directory: ${TARGET_DIR}"
+                  sudo mkdir -p "${TARGET_DIR}"
+                  sudo chown -R ${OWNER} "${TARGET_DIR}"
+                  sudo chmod 755 "${TARGET_DIR}"
+
+                  echo "[DIR] Verify:"
+                  sudo ls -ld "${TARGET_DIR}"
                 '''
             }
         }
 
-        stage('Create file (script)') {
+        stage('Create file if directory exists (sudo)') {
             steps {
                 sh '''
-                    set -e
-                    cat > "$WORKSPACE/mydir/runme.sh" << 'EOF'
+                  set -e
+                  echo "[FILE] Checking directory exists before file creation"
+                  if sudo test -d "${TARGET_DIR}"; then
+                    echo "[FILE] Directory OK — creating file: ${TARGET_FILE}"
+                    # Use tee with sudo so redirection happens with elevated rights
+                    sudo tee "${TARGET_FILE}" > /dev/null << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "Hello from runme.sh"
-echo "I am running from: $(pwd)"
+echo "Running as: $(whoami)"
+echo "PWD: $(pwd)"
 date
 EOF
-                    echo "Created script: $WORKSPACE/mydir/runme.sh"
-                '''
-            }
-        }
-
-        stage('Execute file') {
-            steps {
-                sh '''
-                    set -e
-                    chmod +x "$WORKSPACE/mydir/runme.sh"
-                    "$WORKSPACE/mydir/runme.sh"
-                '''
-            }
-        }
-
-        stage('Set permissions (after execution)') {
-            steps {
-                sh '''
-                    set -e
-                    # Directory readable and traversable by others, script readable by others
-                    chmod 755 "$WORKSPACE/mydir"
-                    chmod 644 "$WORKSPACE/mydir/runme.sh"
-                    echo "Final permissions:"
-                    ls -l "$WORKSPACE/mydir"
-                '''
-            }
-        }
-    }
-}
+                    sudo chown ${OWNER} "${TARGET_FILE}"
+                    # Make it executable now so we can run it next stage
+                    sudo chmod 755 "${TARGET_FILE}"
+                  else
