@@ -1,10 +1,15 @@
-#!/bin/bash
+# 1) Create the folder
+sudo mkdir -p /home/administrator/newfolder
 
-echo "Creating directory mydir"
-sudo mkdir -p mydir
+# 2) Make 'administrator' the owner (recursively)
+sudo chown -R administrator:administrator /home/administrator/newfolder
 
-echo "Changing permission"
-sudo chmod 755 mydir
+# 3) Set permissions:
+#    755 = rwx for owner, rx for group & others (common for shared read)
+sudo chmod -R 755 /home/administrator/newfolder
 
-echo "Directory details:"
-ls -ld mydir
+# (Optional) For private folder, use 700 (owner only)
+# sudo chmod -R 700 /home/administrator/newfolder
+
+# 4) Verify
+ls -ld /home/administrator/newfolder
