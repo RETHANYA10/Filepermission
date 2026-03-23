@@ -3,8 +3,8 @@ pipeline {
 
     // Adjust these to your needs
     environment {
-        TARGET_DIR  = '/home/administrator/newfolder'
-        TARGET_FILE = '/home/administrator/newfolder/runme.sh'
+        TARGET_DIR  = '/home/administrator/newfolder1'
+        TARGET_FILE = '/home/administrator/newfolder1/runme.sh'
         OWNER       = 'administrator:administrator'
     }
 
